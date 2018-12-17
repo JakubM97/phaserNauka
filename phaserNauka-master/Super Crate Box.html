@@ -1,0 +1,147 @@
+<html>
+<head>
+    <title>Super Crate Box Clone</title>
+</head>
+<body>
+    <div id="game"></div>
+    <script src="http://cdn.jsdelivr.net/npm/phaser-ce@2.11.1"></script>
+    <script>
+        const game = new Phaser.Game(640, 480, Phaser.CANVAS, 'game', {
+            preload() {
+				game.load.spritesheet('player','assets/player.png', 32,32);
+				game.load.spritesheet('platform','assets/spr_brick.png', 32, 32);
+				game.load.spritesheet('box','assets/spr_crate_0', 32, 32);
+				game.load.spritesheet('background','assets/back_buildings.png',580,475);
+				game.load.spritesheet('bullet','assets/bullet.png',580,475);
+				game.load.spritesheet('enemy','assets/enemy.png', 28,30);
+				
+			},
+            create() {
+				game.physics.startSystem(Phaser.Physics.ARCADE);
+				game.physics.arcade.gravity.y = 980;
+				game.add.sprite(0, 0,'background');	
+			
+                game.stage.backgroundColor = "#B4D4EE";
+				this.player = game.add.sprite(game.world.centerX, game.world.centerY, 'player');
+				game.physics.arcade.enable(this.player);
+				this.player.body.collideWorldBounds = true;
+				this.player.anchor.setTo(.5,.5);
+				
+				this.player.animations.add('idle', [0,1,2,3], 5, true);
+				this.player.animations.add('walking', [4,5,6,7,8], 5, true);
+				this.player.animations.play('idle');
+				this.player.animations.play('walking');
+				
+				this.platforms = game.add.physicsGroup();
+				this.platforms.add(game.add.sprite(0, 400, 'platform'));
+				this.platforms.add(game.add.sprite(150, 368, 'platform'));
+				this.platforms.add(game.add.sprite(0, 300, 'platform'));
+				this.platforms.add(game.add.sprite(500, 400, 'platform'));
+				
+				/*this.platforms.add(game.add.sprite(0, 300, 'platform'))
+				this.platforms.add(game.add.sprite(0, 300, 'platform'))
+				this.platforms.add(game.add.sprite(0, 300, 'platform'))*/
+				this.platforms.children.forEach((platform) => {
+					platform.body.allowGravity = false;
+					platform.body.immovable = true;
+				});
+				this.weapon = game.add.weapon(100, 'bullet');
+				this.weapon.bulletKillType = Phaser.Weapon.KILL_WORLD_BOUNDS;
+				this.weapon.bulletSpeed = 200;
+				this.weapon.fireRate = 350;
+				this.weapon.trackSprite(this.player, 16, 6);
+				this.weapon.bulletGravity.y = -game.physics.arcade.gravity.y;
+				this.fireButton = this.input.keyboard.addKey(Phaser.KeyCode.SPACEBAR);
+				this.weapon.autofire = false;
+				
+				// add enemies
+				this.enemies = game.add.physicsGroup();
+				game.time.events.loop(Phaser.Timer.SECOND * 4, this.spawnEnemy, this);
+				
+            },
+			spawnEnemy() {
+				let enemy = game.add.sprite(game.rnd.integerInRange(16, 540), 0, 'enemy');
+				enemy.animations.add('running', [0,1,2,3,4,5,6,7,8,9,10], 5, true);
+				let deadAnimation = enemy.animations.add('dead', [11,12,13,14,15,16,17], 30, false);
+				deadAnimation.killOnComplete = true;
+				enemy.animations.play('running');
+				enemy.flip = Math.random() < 0.5 ? true : false;
+				enemy.isDead = false;
+				enemy.anchor.setTo(.5,.5);
+				this.enemies.add(enemy);
+				enemy.body.collideWorldBounds = true;
+			},			
+            update() {
+				game.physics.arcade.collide(this.player, this.platforms);
+				game.physics.arcade.collide(this.weapon.bullets, this.platforms, function (bullet) {
+					bullet.kill();
+				});
+				game.physics.arcade.collide(this.enemies, this.platforms);
+				game.physics.arcade.overlap(this.enemies, this.weapon.bullets, (enemy, bullet) => {
+					bullet.kill();
+					enemy.isDead = true;
+					enemy.body.velocity.x = enemy.body.touching.left ? 300 : -300;
+					enemy.body.velocity.y = -300;
+					enemy.play('dead');
+				});
+			
+				//obsluga poruszania sie
+				if (game.input.keyboard.isDown(Phaser.Keyboard.LEFT)) {
+						this.player.animations.play('walking');
+						//this.player.body.x -= 2;
+						this.player.x -= 3;
+						this.player.scale.x = -1;
+						this.weapon.fireAngle = Phaser.ANGLE_LEFT;
+						this.weapon.trackSprite(this.player, -16, 6);
+				} else if (game.input.keyboard.isDown(Phaser.Keyboard.RIGHT)) {
+						this.player.animations.play('walking');
+						//this.player.body.x += 2;
+						this.player.x += 3;
+						this.player.scale.x = 1;
+						this.weapon.fireAngle = Phaser.ANGLE_RIGHT;
+						this.weapon.trackSprite(this.player, 16, 6);
+				} else {
+				this.player.animations.play('idle');
+				}
+				//obsluga skokow
+				this.player.jumpTimer = 0.1;
+				let isStanding = this.player.body.blocked.down || this.player.body.touching.down;
+				if (
+					game.input.keyboard.isDown(Phaser.Keyboard.UP)
+					&& isStanding
+					&& game.time.now > this.player.jumpTimer
+					) {
+						this.player.body.velocity.y = -420;
+						this.player.jumpTimer = game.time.now + 750;
+					}
+
+				if (this.fireButton.isDown) {
+					this.weapon.fire();
+				}
+				
+				for (let enemy of this.enemies.children) {
+					if (enemy.isDead) {
+						continue;
+					}
+					if (enemy.body.blocked.left || enemy.body.blocked.right || enemy.body.touching.left || enemy.body.touching.right) {
+						enemy.flip = ! enemy.flip;
+					}
+					if (enemy.body.blocked.down || enemy.body.touching.down) {
+						if (enemy.flip) {
+							enemy.body.velocity.x = 100;
+							enemy.scale.x = 1;
+						} else {
+							enemy.body.velocity.x = -100;
+							enemy.scale.x = -1;
+						}
+					}
+				}
+							
+				
+				
+			}
+			
+        });
+    </script>
+</body>
+</html>
